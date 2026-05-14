@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Location Finder</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Location Finder</h1>
+    <p class="tagline">Enter a place name to find every spot in the world that shares it.</p>
+  </header>
+
+  <main>
+    <form id="search-form">
+      <input
+        type="text"
+        id="query"
+        placeholder="e.g. Brooklyn, Springfield, Cambridge"
+        autocomplete="off"
+        required
+      />
+      <button type="submit" id="search-btn">Search</button>
+    </form>
+
+    <div id="status" role="status" aria-live="polite"></div>
+
+    <div id="layout">
+      <section id="results" aria-label="Search results"></section>
+      <section id="map" aria-label="Map of results"></section>
+    </div>
+
+    <footer>
+      Data &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors &mdash;
+      geocoding by <a href="https://nominatim.org/" target="_blank" rel="noopener">Nominatim</a>.
+    </footer>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
