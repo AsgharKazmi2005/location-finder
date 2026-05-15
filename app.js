@@ -68,10 +68,7 @@ function normalizeNominatim(place) {
 function filterByQuery(places, query) {
   const term = query.split(",")[0].trim().toLowerCase();
   if (!term) return places;
-  return places.filter((p) => {
-    const name = p.name.toLowerCase();
-    return name === term || name.startsWith(term + " ") || name.endsWith(" " + term);
-  });
+  return places.filter((p) => p.name.trim().toLowerCase() === term);
 }
 
 function dedupe(places) {
