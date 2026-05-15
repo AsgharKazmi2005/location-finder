@@ -22,21 +22,72 @@ function setStatus(message, isError = false) {
   statusEl.classList.toggle("error", isError);
 }
 
-function formatDisplayName(place) {
-  const parts = place.display_name.split(",").map((p) => p.trim());
+function dedupeKey(name, lat, lon) {
+  return `${name.toLowerCase()}|${lat.toFixed(2)},${lon.toFixed(2)}`;
+}
+
+function normalizePhoton(feature) {
+  const props = feature.properties || {};
+  const [lon, lat] = feature.geometry?.coordinates || [];
+  const name = props.name || "";
+  const contextParts = [props.city, props.county, props.state, props.country]
+    .filter((p) => p && p !== name);
   return {
-    primary: parts[0],
-    secondary: parts.slice(1).join(", "),
+    name,
+    secondary: contextParts.join(", "),
+    country: props.country || "Unknown",
+    countryCode: (props.countrycode || "").toUpperCase(),
+    type: props.osm_value || props.type || "",
+    lat,
+    lon,
+    source: "photon",
+    key: dedupeKey(name, lat, lon),
   };
+}
+
+function normalizeNominatim(place) {
+  const lat = parseFloat(place.lat);
+  const lon = parseFloat(place.lon);
+  const addr = place.address || {};
+  const name = (place.display_name || "").split(",")[0].trim();
+  const contextParts = [addr.city, addr.town, addr.village, addr.county, addr.state, addr.country]
+    .filter((p, i, arr) => p && p !== name && arr.indexOf(p) === i);
+  return {
+    name,
+    secondary: contextParts.join(", "),
+    country: addr.country || "Unknown",
+    countryCode: (addr.country_code || "").toUpperCase(),
+    type: place.type || place.class || "",
+    lat,
+    lon,
+    source: "nominatim",
+    key: dedupeKey(name, lat, lon),
+  };
+}
+
+function filterByQuery(places, query) {
+  const term = query.split(",")[0].trim().toLowerCase();
+  if (!term) return places;
+  return places.filter((p) => {
+    const name = p.name.toLowerCase();
+    return name === term || name.startsWith(term + " ") || name.endsWith(" " + term);
+  });
+}
+
+function dedupe(places) {
+  const seen = new Map();
+  for (const p of places) {
+    if (!seen.has(p.key)) seen.set(p.key, p);
+  }
+  return [...seen.values()];
 }
 
 function groupByCountry(places) {
   const groups = new Map();
   for (const place of places) {
-    const country = place.address?.country || "Unknown";
-    const code = place.address?.country_code?.toUpperCase() || "";
+    const country = place.country;
     if (!groups.has(country)) {
-      groups.set(country, { code, places: [] });
+      groups.set(country, { code: place.countryCode, places: [] });
     }
     groups.get(country).places.push(place);
   }
@@ -90,29 +141,25 @@ function renderResults(places) {
     list.className = "country-places";
 
     countryPlaces.forEach((place) => {
-      const { primary, secondary } = formatDisplayName(place);
-      const lat = parseFloat(place.lat);
-      const lon = parseFloat(place.lon);
-
       const item = document.createElement("div");
       item.className = "result-item";
       item.innerHTML = `
-        <div class="result-name">${primary}</div>
+        <div class="result-name">${place.name}</div>
         <div class="result-detail">
-          <span>${secondary || "—"}</span>
+          <span>${place.secondary || "—"}</span>
           ${place.type ? `<span class="badge">${place.type.replace(/_/g, " ")}</span>` : ""}
         </div>
       `;
 
-      const marker = L.marker([lat, lon]).addTo(map);
-      marker.bindPopup(`<strong>${primary}</strong><br>${secondary}`);
+      const marker = L.marker([place.lat, place.lon]).addTo(map);
+      marker.bindPopup(`<strong>${place.name}</strong><br>${place.secondary}`);
       markers.push(marker);
-      bounds.extend([lat, lon]);
+      bounds.extend([place.lat, place.lon]);
 
       item.addEventListener("click", () => {
         document.querySelectorAll(".result-item").forEach((el) => el.classList.remove("active"));
         item.classList.add("active");
-        map.setView([lat, lon], 10);
+        map.setView([place.lat, place.lon], 10);
         marker.openPopup();
       });
 
@@ -128,22 +175,39 @@ function renderResults(places) {
   }
 }
 
-async function searchLocation(query) {
+async function searchPhoton(query) {
+  const url = new URL("https://photon.komoot.io/api/");
+  url.searchParams.set("q", query);
+  url.searchParams.set("limit", "50");
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Photon HTTP ${res.status}`);
+  const data = await res.json();
+  return (data.features || []).map(normalizePhoton);
+}
+
+async function searchNominatim(query) {
   const url = new URL("https://nominatim.openstreetmap.org/search");
   url.searchParams.set("q", query);
   url.searchParams.set("format", "json");
   url.searchParams.set("limit", "50");
   url.searchParams.set("addressdetails", "1");
+  url.searchParams.set("dedupe", "0");
+  const res = await fetch(url, { headers: { "Accept-Language": "en" } });
+  if (!res.ok) throw new Error(`Nominatim HTTP ${res.status}`);
+  const data = await res.json();
+  return data.map(normalizeNominatim);
+}
 
-  const response = await fetch(url, {
-    headers: { "Accept-Language": "en" },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Search failed (HTTP ${response.status})`);
+async function searchLocation(query) {
+  const results = await Promise.allSettled([searchPhoton(query), searchNominatim(query)]);
+  const merged = [];
+  for (const r of results) {
+    if (r.status === "fulfilled") merged.push(...r.value);
   }
-
-  return response.json();
+  if (merged.length === 0 && results.every((r) => r.status === "rejected")) {
+    throw new Error(results[0].reason?.message || "Search failed");
+  }
+  return merged;
 }
 
 form.addEventListener("submit", async (e) => {
@@ -156,8 +220,9 @@ form.addEventListener("submit", async (e) => {
   resultsEl.innerHTML = "";
 
   try {
-    const places = await searchLocation(query);
-    renderResults(places);
+    const raw = await searchLocation(query);
+    const filtered = dedupe(filterByQuery(raw, query));
+    renderResults(filtered);
   } catch (err) {
     setStatus(err.message || "Something went wrong. Please try again.", true);
   } finally {
