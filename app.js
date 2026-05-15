@@ -30,6 +30,30 @@ function formatDisplayName(place) {
   };
 }
 
+function groupByCountry(places) {
+  const groups = new Map();
+  for (const place of places) {
+    const country = place.address?.country || "Unknown";
+    const code = place.address?.country_code?.toUpperCase() || "";
+    if (!groups.has(country)) {
+      groups.set(country, { code, places: [] });
+    }
+    groups.get(country).places.push(place);
+  }
+  return [...groups.entries()].sort((a, b) => {
+    if (b[1].places.length !== a[1].places.length) {
+      return b[1].places.length - a[1].places.length;
+    }
+    return a[0].localeCompare(b[0]);
+  });
+}
+
+function countryFlag(code) {
+  if (!code || code.length !== 2) return "";
+  const A = 0x1f1e6;
+  return String.fromCodePoint(...[...code].map((c) => A + c.charCodeAt(0) - 65));
+}
+
 function renderResults(places) {
   resultsEl.innerHTML = "";
   clearMarkers();
@@ -39,39 +63,64 @@ function renderResults(places) {
     return;
   }
 
-  setStatus(`Found ${places.length} place${places.length === 1 ? "" : "s"} matching your search.`);
+  const grouped = groupByCountry(places);
+  setStatus(
+    `Found ${places.length} place${places.length === 1 ? "" : "s"} across ${grouped.length} ${
+      grouped.length === 1 ? "country" : "countries"
+    }.`
+  );
 
   const bounds = L.latLngBounds([]);
 
-  places.forEach((place, idx) => {
-    const { primary, secondary } = formatDisplayName(place);
-    const lat = parseFloat(place.lat);
-    const lon = parseFloat(place.lon);
+  grouped.forEach(([country, { code, places: countryPlaces }]) => {
+    const details = document.createElement("details");
+    details.className = "country-group";
+    details.open = grouped.length <= 3;
 
-    const item = document.createElement("div");
-    item.className = "result-item";
-    item.dataset.index = idx;
-    item.innerHTML = `
-      <div class="result-name">${primary}</div>
-      <div class="result-detail">
-        <span>${secondary || "—"}</span>
-        ${place.type ? `<span class="badge">${place.type.replace(/_/g, " ")}</span>` : ""}
-      </div>
+    const summary = document.createElement("summary");
+    summary.className = "country-summary";
+    summary.innerHTML = `
+      <span class="country-flag">${countryFlag(code)}</span>
+      <span class="country-name">${country}</span>
+      <span class="country-count">${countryPlaces.length}</span>
     `;
+    details.appendChild(summary);
 
-    const marker = L.marker([lat, lon]).addTo(map);
-    marker.bindPopup(`<strong>${primary}</strong><br>${secondary}`);
-    markers.push(marker);
-    bounds.extend([lat, lon]);
+    const list = document.createElement("div");
+    list.className = "country-places";
 
-    item.addEventListener("click", () => {
-      document.querySelectorAll(".result-item").forEach((el) => el.classList.remove("active"));
-      item.classList.add("active");
-      map.setView([lat, lon], 10);
-      marker.openPopup();
+    countryPlaces.forEach((place) => {
+      const { primary, secondary } = formatDisplayName(place);
+      const lat = parseFloat(place.lat);
+      const lon = parseFloat(place.lon);
+
+      const item = document.createElement("div");
+      item.className = "result-item";
+      item.innerHTML = `
+        <div class="result-name">${primary}</div>
+        <div class="result-detail">
+          <span>${secondary || "—"}</span>
+          ${place.type ? `<span class="badge">${place.type.replace(/_/g, " ")}</span>` : ""}
+        </div>
+      `;
+
+      const marker = L.marker([lat, lon]).addTo(map);
+      marker.bindPopup(`<strong>${primary}</strong><br>${secondary}`);
+      markers.push(marker);
+      bounds.extend([lat, lon]);
+
+      item.addEventListener("click", () => {
+        document.querySelectorAll(".result-item").forEach((el) => el.classList.remove("active"));
+        item.classList.add("active");
+        map.setView([lat, lon], 10);
+        marker.openPopup();
+      });
+
+      list.appendChild(item);
     });
 
-    resultsEl.appendChild(item);
+    details.appendChild(list);
+    resultsEl.appendChild(details);
   });
 
   if (bounds.isValid()) {

@@ -119,16 +119,82 @@ main {
   font-style: italic;
 }
 
+.country-group {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  margin-bottom: 0.5rem;
+  background: #fafafa;
+  overflow: hidden;
+}
+
+.country-group[open] {
+  background: white;
+}
+
+.country-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  font-weight: 600;
+  color: #111827;
+  list-style: none;
+  user-select: none;
+  transition: background 0.1s;
+}
+
+.country-summary::-webkit-details-marker {
+  display: none;
+}
+
+.country-summary::before {
+  content: "▶";
+  font-size: 0.7rem;
+  color: #6b7280;
+  transition: transform 0.15s;
+  display: inline-block;
+}
+
+.country-group[open] .country-summary::before {
+  transform: rotate(90deg);
+}
+
+.country-summary:hover {
+  background: #f3f4f6;
+}
+
+.country-flag {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.country-name {
+  flex: 1;
+}
+
+.country-count {
+  background: #2563eb;
+  color: white;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  min-width: 1.75rem;
+  text-align: center;
+}
+
+.country-places {
+  padding: 0.25rem 0.5rem 0.5rem 0.5rem;
+  border-top: 1px solid #f3f4f6;
+}
+
 .result-item {
-  padding: 0.85rem 1rem;
-  border-bottom: 1px solid #f3f4f6;
+  padding: 0.7rem 0.85rem;
+  margin-top: 0.25rem;
   cursor: pointer;
   transition: background 0.1s;
   border-radius: 6px;
-}
-
-.result-item:last-child {
-  border-bottom: none;
 }
 
 .result-item:hover {
