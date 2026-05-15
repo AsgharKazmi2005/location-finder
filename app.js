@@ -26,6 +26,26 @@ function dedupeKey(name, lat, lon) {
   return `${name.toLowerCase()}|${lat.toFixed(2)},${lon.toFixed(2)}`;
 }
 
+const SETTLEMENT_VALUES = new Set([
+  "country",
+  "state",
+  "region",
+  "province",
+  "district",
+  "county",
+  "municipality",
+  "city",
+  "town",
+  "village",
+  "borough",
+]);
+
+function isSettlement(osmKey, osmValue) {
+  if (osmKey === "place" && SETTLEMENT_VALUES.has(osmValue)) return true;
+  if (osmKey === "boundary" && osmValue === "administrative") return true;
+  return false;
+}
+
 function normalizePhoton(feature) {
   const props = feature.properties || {};
   const [lon, lat] = feature.geometry?.coordinates || [];
@@ -37,6 +57,8 @@ function normalizePhoton(feature) {
     secondary: contextParts.join(", "),
     country: props.country || "Unknown",
     countryCode: (props.countrycode || "").toUpperCase(),
+    osmKey: props.osm_key || "",
+    osmValue: props.osm_value || "",
     type: props.osm_value || props.type || "",
     lat,
     lon,
@@ -57,6 +79,8 @@ function normalizeNominatim(place) {
     secondary: contextParts.join(", "),
     country: addr.country || "Unknown",
     countryCode: (addr.country_code || "").toUpperCase(),
+    osmKey: place.class || "",
+    osmValue: place.type || "",
     type: place.type || place.class || "",
     lat,
     lon,
@@ -218,7 +242,8 @@ form.addEventListener("submit", async (e) => {
 
   try {
     const raw = await searchLocation(query);
-    const filtered = dedupe(filterByQuery(raw, query));
+    const settlements = raw.filter((p) => isSettlement(p.osmKey, p.osmValue));
+    const filtered = dedupe(filterByQuery(settlements, query));
     renderResults(filtered);
   } catch (err) {
     setStatus(err.message || "Something went wrong. Please try again.", true);
