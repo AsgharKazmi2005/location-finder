@@ -23,27 +23,20 @@ function setStatus(message, isError = false) {
 }
 
 function dedupeKey(name, lat, lon) {
-  return `${name.toLowerCase()}|${lat.toFixed(2)},${lon.toFixed(2)}`;
+  return `${lat.toFixed(3)},${lon.toFixed(3)}`;
 }
 
 const SETTLEMENT_VALUES = new Set([
   "country",
   "state",
-  "region",
-  "province",
-  "district",
-  "county",
-  "municipality",
   "city",
   "town",
   "village",
-  "borough",
+  "municipality",
 ]);
 
 function isSettlement(osmKey, osmValue) {
-  if (osmKey === "place" && SETTLEMENT_VALUES.has(osmValue)) return true;
-  if (osmKey === "boundary" && osmValue === "administrative") return true;
-  return false;
+  return osmKey === "place" && SETTLEMENT_VALUES.has(osmValue);
 }
 
 function normalizePhoton(feature) {
@@ -92,7 +85,13 @@ function normalizeNominatim(place) {
 function filterByQuery(places, query) {
   const term = query.split(",")[0].trim().toLowerCase();
   if (!term) return places;
-  return places.filter((p) => p.name.trim().toLowerCase() === term);
+  const stripEdges = (t) => t.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+  return places.filter((p) => {
+    const name = p.name.trim().toLowerCase();
+    if (name === term) return true;
+    const tokens = name.split(/\s+/).map(stripEdges);
+    return tokens.includes(term);
+  });
 }
 
 function dedupe(places) {
@@ -200,6 +199,7 @@ async function searchPhoton(query) {
   const url = new URL("https://photon.komoot.io/api/");
   url.searchParams.set("q", query);
   url.searchParams.set("limit", "50");
+  url.searchParams.set("lang", "default");
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Photon HTTP ${res.status}`);
   const data = await res.json();
